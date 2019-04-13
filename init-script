@@ -85,6 +85,9 @@ fi
 
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
 
+# Is CONFIG_HOTPLUG set
+IS_HOTPLUG="y"
+
 # Default setting is rndis - add mass_storage for a debug boot
 # enable using usb_setup
 USB_FUNCTIONS=rndis
@@ -123,6 +126,17 @@ do_mount_devprocsys()
 
     mkdir /config
     mount -t configfs none /config
+}
+
+is_hotplug_set()
+{
+    IS_HOTPLUG="n"
+    if [ -e /proc/config.gz ]; then
+        # Must be =y
+        for x in CONFIG_HOTPLUG; do
+            zcat /proc/config.gz | grep -E "^$x=y\$" && IS_HOTPLUG="y"
+        done
+    fi
 }
 
 do_hotplug_scan()
@@ -343,7 +357,11 @@ if [ "$DONE_SWITCH" = "no" ]; then
 
     do_mount_devprocsys
 
-    do_hotplug_scan
+    # check if CONFIG_HOTPLUG is set
+    is_hotplug_set
+    if [ "$IS_HOTPLUG" = "y" ]; then
+        do_hotplug_scan
+    fi
 
     # Support /dev/block/mmcXXX only in initrd phase
     ln -s . /dev/block
@@ -383,7 +401,9 @@ if [ "$DONE_SWITCH" = "no" ]; then
     fi
 
     # Disable mdev hotplug now - let udev handle it in main boot
-    echo "" > /proc/sys/kernel/hotplug
+    if [ "$IS_HOTPLUG" = "y" ]; then
+        echo "" > /proc/sys/kernel/hotplug
+    fi
 
     if [ -f "/target/init-debug" ]; then
 	exec switch_root /target /init-debug &> /target/init-debug-stderrout
